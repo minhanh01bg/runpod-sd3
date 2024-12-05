@@ -1,8 +1,8 @@
 runpod~=1.7.0
 hf_transfer
 # diffusers
-transformers==4.30.0
-accelerate==0.23.0
+# transformers==4.28.0
+accelerate==0.28.0
 safetensors==0.3.2
 scipy == 1.11.2
 numpy>=1.26.1

@@ -8,7 +8,7 @@ import concurrent.futures
 
 import torch
 from diffusers import StableDiffusion3Pipeline
-from transformers import T5EncoderModel, BitsAndBytesConfig
+# from transformers import T5EncoderModel, BitsAndBytesConfig
 
 
 import runpod
@@ -26,21 +26,35 @@ torch.cuda.empty_cache()
 
 class ModelHandler:
     def __init__(self):
-        self.quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        # self.quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         self.model_id = "stabilityai/stable-diffusion-3-medium-diffusers"
 
     def load_models(self):
-        text_encoder = T5EncoderModel.from_pretrained(
-            self.model_id,
-            subfolder="text_encoder_3",
-            quantization_config=self.quantization_config,
-        )
+        # text_encoder = T5EncoderModel.from_pretrained(
+        #     self.model_id,
+        #     subfolder="text_encoder_3",
+        #     quantization_config=self.quantization_config,
+        # )
+        torch.set_float32_matmul_precision("high")
+
+        torch._inductor.config.conv_1x1_as_mm = True
+        torch._inductor.config.coordinate_descent_tuning = True
+        torch._inductor.config.epilogue_fusion = False
+        torch._inductor.config.coordinate_descent_check_all_directions = True
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(device)
         self.pipe = StableDiffusion3Pipeline.from_pretrained(
             self.model_id,
-            text_encoder_3=text_encoder,
-            device_map="balanced",
+            # text_encoder_3=text_encoder,
+            # device_map="balanced",
             torch_dtype=torch.float16
-        )
+        ).to(device)
+        self.pipe.set_progress_bar_config(disable=True)
+        self.pipe.transformer.to(memory_format=torch.channels_last)
+        self.pipe.vae.to(memory_format=torch.channels_last)
+        self.pipe.transformer = torch.compile(self.pipe.transformer, mode="max-autotune", fullgraph=True)
+        self.pipe.vae.decode = torch.compile(self.pipe.vae.decode, mode="max-autotune", fullgraph=True)
+
 
 MODELS = ModelHandler()
 MODELS.load_models()

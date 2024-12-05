@@ -27,43 +27,25 @@ def get_diffusion_pipelines():
     '''
     Fetches the Stable Diffusion XL pipelines from the HuggingFace model hub.
     '''
-    
+    torch.set_float32_matmul_precision("high")
 
-    # pipe = fetch_pretrained_model(StableDiffusionXLPipeline,
-    #                               "stabilityai/stable-diffusion-xl-base-1.0", **common_args)
-    # vae = fetch_pretrained_model(
-    #     AutoencoderKL, "madebyollin/sdxl-vae-fp16-fix", **{"torch_dtype": torch.float16}
-    # )
-    # print("Loaded VAE")
-    # refiner = fetch_pretrained_model(StableDiffusionXLImg2ImgPipeline,
-    #                                  "stabilityai/stable-diffusion-xl-refiner-1.0", **common_args)
-    # quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-    # config = {
-    #         "quantization_config":quantization_config,
-    #         "subfolder": "text_encoder_3"
-    #     }
-    # t5 = fetch_pretrained_model(T5EncoderModel, "stabilityai/stable-diffusion-3-medium-diffusers", **config)
+    torch._inductor.config.conv_1x1_as_mm = True
+    torch._inductor.config.coordinate_descent_tuning = True
+    torch._inductor.config.epilogue_fusion = False
+    torch._inductor.config.coordinate_descent_check_all_directions = True
 
-    # common_args = {
-    #     "text_encoder_3": t5,
-    #     "device_map": "balanced",
-    #     "torch_dtype": torch.float16,
-    # }
-    # pipe = fetch_pretrained_model(StableDiffusion3Pipeline,"stabilityai/stable-diffusion-3-medium-diffusers",**common_args)
-    quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-    model_id = "stabilityai/stable-diffusion-3-medium-diffusers"
-    text_encoder = T5EncoderModel.from_pretrained(
-    model_id,
-    subfolder="text_encoder_3",
-    quantization_config=quantization_config,
-    )
     pipe = StableDiffusion3Pipeline.from_pretrained(
-    model_id,
-    text_encoder_3=text_encoder,
-    device_map="balanced",
-    torch_dtype=torch.float16
+        "stabilityai/stable-diffusion-3-medium-diffusers",
+        # text_encoder_3=text_encoder,
+        # device_map="balanced",
+        torch_dtype=torch.float16
     )
+    # .to("cuda")
+    pipe.set_progress_bar_config(disable=True)
+    pipe.transformer.to(memory_format=torch.channels_last)
+    pipe.vae.to(memory_format=torch.channels_last)
+    pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune", fullgraph=True)
+    pipe.vae.decode = torch.compile(pipe.vae.decode, mode="max-autotune", fullgraph=True)
 
     return pipe
 
